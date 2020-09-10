@@ -1,6 +1,5 @@
 import random
 import re
-
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor, VotingRegressor
@@ -58,14 +57,7 @@ class EnsembleGeneticProgramming:
         random_state = random.choice(forest_features['random_state'])
 
         # choose randomly dataset features
-        num_of_dataset_features = random.randrange(len(dataset_features)) + 1
-        used_features = []
-        for _ in range(num_of_dataset_features):
-            choose_feature = random.choice(dataset_features)
-            if len(used_features) < len(dataset_features):
-                while choose_feature in used_features:
-                    choose_feature = random.choice(dataset_features)
-                used_features.append(choose_feature)
+        used_features = self._choose_features(dataset_features)
 
         rf_str = 'START, ' + ', '.join(used_features) + ', END, ' + \
                  f'{max_depth}, {min_samples_split}, {min_weight_fraction_leaf}, {max_features}, {random_state}'
@@ -74,6 +66,17 @@ class EnsembleGeneticProgramming:
                                        min_weight_fraction_leaf=min_weight_fraction_leaf, n_jobs=-1)
 
         return rf_str, rf_reg
+
+    def _choose_features(self, features):
+        num_of_features = random.randrange(len(features)) + 1
+        used_features = []
+        for _ in range(num_of_features):
+            choose_feature = random.choice(features)
+            if len(used_features) < len(features):
+                while choose_feature in used_features:
+                    choose_feature = random.choice(features)
+                used_features.append(choose_feature)
+        return used_features
 
     def _select_forests(self, forest_list, X, y):
         forest_parents = []
@@ -101,11 +104,70 @@ class EnsembleGeneticProgramming:
         return forest_parents
 
     def _breed(self, forest_parents):
-        first_parent = random.choice(forest_parents)
-        second_parent = None
-        return []
+        parent_1 = random.choice(forest_parents)
+        parent_2 = random.choice(forest_parents)
+
+        off_spring = self._uniform_crossover(parent_1, parent_2)
+        print(off_spring[1])
+        # mutation_prob = random.random()
+        mutation_prob = 0
+        if mutation_prob < 0.5:
+            off_spring = self._mutate(off_spring)
+        print(off_spring[1])
+        return off_spring
+
+    def _uniform_crossover(self, parent_1, parent_2):
+        offspring_forest_features = {'max_depth': None, 'min_samples_split': None, 'min_weight_fraction_leaf': None,
+                                     'max_features': None, 'random_state': None}
+        parent_1_forest_features = {'max_depth': parent_1[1].max_depth,
+                                    'min_samples_split': parent_1[1].min_samples_split,
+                                    'min_weight_fraction_leaf': parent_1[1].min_weight_fraction_leaf,
+                                     'max_features': parent_1[1].max_features, 'random_state': parent_1[1].random_state}
+        parent_2_forest_features = {'max_depth': parent_2[1].max_depth,
+                                    'min_samples_split': parent_2[1].min_samples_split,
+                                    'min_weight_fraction_leaf': parent_2[1].min_weight_fraction_leaf,
+                                    'max_features': parent_2[1].max_features, 'random_state': parent_2[1].random_state}
+
+        for key in offspring_forest_features:
+            p = random.random()
+            if p < 0.5:
+                offspring_forest_features[key] = parent_1_forest_features[key]
+            else:
+                offspring_forest_features[key] = parent_2_forest_features[key]
+
+        selected_parent_1_dataset_features = re.search('START, (.*), END', parent_1[0]).group(1).split(', ')
+        selected_parent_2_dataset_features = re.search('START, (.*), END', parent_2[0]).group(1).split(', ')
+
+        offspring_dataset_features = list(set(selected_parent_1_dataset_features + selected_parent_2_dataset_features))
+
+        rf_str = 'START, ' + ', '.join(offspring_dataset_features) + ', END, ' + \
+                 f"{offspring_forest_features['max_depth']}, {offspring_forest_features['min_samples_split']}," \
+                 f" {offspring_forest_features['min_weight_fraction_leaf']}," \
+                 f" {offspring_forest_features['max_features']}, {offspring_forest_features['random_state']}"
+
+        rf_reg = RandomForestRegressor(n_estimators=self.num_trees, max_depth=offspring_forest_features['max_depth'],
+                                       random_state=offspring_forest_features['random_state'],
+                                       min_samples_split=offspring_forest_features['min_samples_split'],
+                                       max_features=offspring_forest_features['max_features'],
+                                       min_weight_fraction_leaf=offspring_forest_features['min_weight_fraction_leaf'],
+                                       n_jobs=-1)
+
+        return rf_str, rf_reg
+
+    def _mutate(self, off_spring):
+        mutate_feature = random.choice(['max_depth', 'min_samples_split', 'min_weight_fraction_leaf',
+                                        'max_features', 'random_state'])
+        forest_features = {'max_depth': range(2, 10),
+                           'min_samples_split': range(2, 10),
+                           'min_weight_fraction_leaf': np.linspace(0.05, 0.5, 10),
+                           'max_features': ['auto', 'sqrt', 'log2'],
+                           'random_state': range(2, 100)}
+        print(mutate_feature)
+        off_spring[1].__setattr__(mutate_feature, random.choice(forest_features[mutate_feature]))
+        return off_spring
 
     def _prune(self, forest_off_springs, X, y):
+        # TODO - STOP HERE
         forest_list = []
         # choose randomly 5% of the forests
         # the rest take the best forests
@@ -116,9 +178,7 @@ class EnsembleGeneticProgramming:
         dataset_features = re.search('START, (.*), END', ind[0]).group(1).split(', ')
         forest = ind[1]
 
-        #  ***CHECK***
         X_train, X_test, y_train, y_test = train_test_split(X[dataset_features], y, test_size=0.2, shuffle=True)
-        #  ***CHECK***
         forest.fit(X_train, y_train)
         y_pred = forest.predict(X_test)
 
@@ -136,5 +196,10 @@ class EnsembleGeneticProgramming:
 
     def score(self, X, y):
         pass
+
+
+
+
+
 
 

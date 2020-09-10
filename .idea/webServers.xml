@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="266c8828-ae51-4718-82b7-f08ba0d277d8" name="ISE cluster">
+        <fileTransfer rootFolder="/home/sakazis" accessType="SFTP" host="132.72.44.112" port="22" sshConfigId="12ff3b26-4cb0-4545-8a3d-e05e4736e78b" sshConfig="sakazis@132.72.44.112:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
