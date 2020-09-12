@@ -9,6 +9,13 @@
           </mappings>
         </serverdata>
       </paths>
+      <paths name="sakazis@132.72.80.124:22">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/workspace/MachineLearningFinalProject" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
     </serverData>
     <option name="myAutoUpload" value="ALWAYS" />
   </component>
