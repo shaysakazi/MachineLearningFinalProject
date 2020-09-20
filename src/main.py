@@ -18,7 +18,7 @@ server_dir = '/home/sakazis/workspace/MachineLearningFinalProject/'
 working_dir = home_dir
 
 
-def eval_dataset(dataset_path, model_name, egp_hyper_parameters):
+def eval_dataset(dataset_path, model_name, hyper_parameters):
     dataset = pd.read_csv(f'{working_dir}/regressionDatasets/{dataset_path}')
     test_data = []
     X = dataset.iloc[:, :-1]
@@ -28,6 +28,7 @@ def eval_dataset(dataset_path, model_name, egp_hyper_parameters):
 
     outer_kf = KFold(n_splits=10, shuffle=True)
     outer_fold_index = 1
+    model = EnsembleGeneticProgramming() if model_name == 'Ensemble Genetic Programming' else ExtraTreeRegressor()
 
     for train_index, test_index in outer_kf.split(X):
         time = datetime.now()
@@ -41,25 +42,25 @@ def eval_dataset(dataset_path, model_name, egp_hyper_parameters):
         X_train, X_test = X.iloc[train_index], X.iloc[test_index]
         y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
-        if model_name == 'Ensemble Genetic Programming':
-            model = EnsembleGeneticProgramming()
-            hyper_parameters = egp_hyper_parameters
-        else:
-            model = ExtraTreeRegressor()
-            hyper_parameters = dict(max_depth=range(1, 9), min_samples_split=range(2, 8), splitter=['random', 'best'])
         random_search_cv = RandomizedSearchCV(model, hyper_parameters, n_iter=50, cv=3).fit(X_train, y_train)
+        best_params = random_search_cv.best_params_
 
-        test_cross_data['Hyper-Parameters Values'] = str(random_search_cv.best_params_)\
+        test_cross_data['Hyper-Parameters Values'] = str(best_params)\
             .replace('\'', '').replace('{', '').replace('}', '')
 
-        fold_model = random_search_cv.best_estimator_
+        if model_name == 'Ensemble Genetic Programming':
+            model.set_params(num_trees=best_params['num_trees'], num_forest=best_params['num_forest'],
+                             max_generations=best_params['max_generations'])
+        else:
+            model.set_params(max_depth=best_params['max_depth'], min_samples_split=best_params['min_samples_split'],
+                             splitter=best_params['splitter'])
 
         time_before_train = datetime.now()
-        fold_model.fit(X_train, y_train)
+        model.fit(X_train, y_train)
         train_time = datetime.now() - time_before_train
         test_cross_data['Training Time'] = f"{train_time.microseconds} microseconds"
 
-        y_pred = fold_model.predict(X_test)
+        y_pred = model.predict(X_test)
         test_cross_data['Mean Squared Error'] = mean_squared_error(y_test, y_pred)
         test_cross_data['Mean Absolute Error'] = mean_absolute_error(y_test, y_pred)
         test_cross_data['Median Absolute Error'] = median_absolute_error(y_test, y_pred)
@@ -68,9 +69,13 @@ def eval_dataset(dataset_path, model_name, egp_hyper_parameters):
 
         time_before_predict = datetime.now()
         if len(X) < 1000:
-            fold_model.predict(X)
+            model.predict(X)
+            X_inference_time = X.__deepcopy__()
+            while len(X_inference_time) < 1000:
+                X_inference_time = X_inference_time.append(X_inference_time)
+            model.predict(X.iloc[:1000])
         else:
-            fold_model.predict(X.iloc[:1000])
+            model.predict(X.iloc[:1000])
         predict_time = datetime.now() - time_before_predict
         test_cross_data['Inference Time'] = f"{predict_time.microseconds} microseconds"
 
@@ -84,23 +89,39 @@ def eval_dataset(dataset_path, model_name, egp_hyper_parameters):
 
 def eval_datasets():
     dataset_index = 1
-    egp_hyper_parameters = dict(num_trees=range(50, 500, 50), num_forest=range(10, 40, 5),
-                                max_generations=range(10, 90, 10))
+    egp_hyper_parameters = dict(num_trees=range(20, 110, 10), num_forest=range(2, 11, 2),
+                                max_generations=range(5, 25, 5))
+    etr_hyper_parameters = dict(max_depth=range(1, 9), min_samples_split=range(2, 8), splitter=['random', 'best'])
+    dataset_results = []
     egp_str = str(egp_hyper_parameters).replace('\'', '').replace('{', '').replace('}', '')
     print("EGP hyper-parameters are: " + egp_str)
+
     for dataset_path in os.listdir(f'{working_dir}/regressionDatasets/'):
         time = datetime.now()
         print(f"dataset index: {dataset_index}, dataset name: {dataset_path}")
-        dataset_results = eval_dataset(dataset_path, 'Ensemble Genetic Programming', egp_hyper_parameters)
-        pd.DataFrame(dataset_results).to_csv(f'results_{dataset_path}', index=False)
+        dataset_results.extend(eval_dataset(dataset_path, 'Ensemble Genetic Programming', egp_hyper_parameters))
+        dataset_results.extend(eval_dataset(dataset_path, 'Extra Tree Regressor', etr_hyper_parameters))
         time = datetime.now() - time
         print(f"Finish {dataset_path} dataset after {time.seconds / 60:.4f} minutes\n")
         dataset_index += 1
+        break
+    pd.DataFrame(dataset_results).to_csv(f'{working_dir}/Outputs/final_results.csv', index=False)
+
+
+# def illustrate():
+#     df = pd.read_csv(f"{working_dir}/regressionDatasets/Admission_Predict_kaggle.csv")
+#     egp = EnsembleGeneticProgramming(num_trees=50, num_forest=5, max_generations=2)
+#     X = df.iloc[:, :-1]
+#     X = X.fillna(0)
+#     X = pd.get_dummies(X)
+#     y = df.iloc[:, -1]
+#     egp.fit(X, y)
 
 
 def main():
-    # eval_datasets()
-    meta_learning(working_dir)
+    eval_datasets()
+    # meta_learning(working_dir)
+    # illustrate()
 
 
 if __name__ == '__main__':
